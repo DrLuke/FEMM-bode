@@ -5,6 +5,7 @@ import numpy as np
 import re
 import math
 from scipy.interpolate import griddata
+import os
 
 class FEMMans:
     def __init__(self, points, preamble):
@@ -64,7 +65,38 @@ class FEMM:
         plt.contour(grid_x, grid_y, grid)
         plt.show()
 
+    def saveans(self, ans, name):
+        grid_x, grid_y = np.mgrid[math.floor(ans.x.min()):math.ceil(ans.x.max()):1000j,
+                         math.floor(ans.y.min()):math.ceil(ans.y.max()):1000j]
+        grid = griddata(np.vstack((ans.x, ans.y)).T, np.absolute(ans.B), (grid_x, grid_y), method='cubic')
 
+        plt.imshow(grid.T, extent=(
+        math.floor(ans.x.min()), math.ceil(ans.x.max()), math.floor(ans.y.min()), math.ceil(ans.y.max())),
+                   cmap=plt.get_cmap("jet"),
+                   vmin=0, vmax=0.0000002)
+        plt.colorbar()
+        plt.contour(grid_x, grid_y, grid)
+        plt.savefig(name)
+        plt.clf()
+
+    def plotlogrange(self, femmfile, start, stop):
+        file = None
+        with open(femmfile) as f:
+            file = f.read()
+
+        logscale = np.logspace(start, stop, num=2000)
+
+        freqregex = re.compile(r"\[Frequency\]\s*=\s*[\d\.e-]+$", re.MULTILINE)
+        for freq in logscale:
+            newfile = freqregex.sub("[Frequency] = %s" % freq, file)
+            tail, head = os.path.split(femmfile)
+            with open(os.path.join(tail, "TEMP.FEM"), "w") as f:
+                f.write(newfile)
+            #wine C:\\femm42\\bin\\femm.exe -lua-script=C:\\femm42\\examples\\test.lua
+            subprocess.call(["wine", "C:\\femm42\\bin\\femm.exe", "-lua-script=C:\\femm42\\examples\\test.lua", "-windowhide"])
+
+            thisans = self.readans(os.path.join(tail, "TEMP.ans"))
+            self.saveans(thisans, os.path.join("test", str(freq) + ".png"))
 
 
 
@@ -72,5 +104,7 @@ class FEMM:
 
 if __name__ == "__main__":
     a = FEMM()
-    ansr = a.readans("/home/drluke/.wine/drive_c/femm42/examples/test.ans")
-    a.plotans(ansr)
+    #ansr = a.readans("/home/drluke/.wine/drive_c/femm42/examples/test.ans")
+    #a.plotans(ansr)
+    #a.saveans(ansr, "foo.png")
+    a.plotlogrange("/home/drluke/.wine/drive_c/femm42/examples/test.FEM", -1, 12)
