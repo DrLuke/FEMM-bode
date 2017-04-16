@@ -1,6 +1,6 @@
 import subprocess
-import matplotlib as mpl
-import matplotlib.pyplot as plt
+#import matplotlib as mpl
+#import matplotlib.pyplot as plt
 import numpy as np
 import re
 import math
@@ -14,6 +14,68 @@ class FEMMans:
         self.x = np.zeros(points)
         self.y = np.zeros(points)
         self.B = np.zeros(points, dtype=np.complex64)
+
+    @staticmethod
+    def readans(path):
+        with open(path, "r") as f:
+            firstline = f.readline()
+            match = re.search("\[Format\]\s*=\s*([\d\.]+)", firstline)
+            if match:
+                if match.group(1) == "4.0":
+                    return FEMMans.readans40(f)
+
+    @staticmethod
+    def readans40(f):
+        preamble = ""  # Everything before the [Solution] tag
+        points = None  # Number of datapoints to expect
+
+        ans = None
+        index = 0
+
+        dataregex = re.compile(r"^([\d\.e-]+)\s+([\d\.e-]+)\s+([\d\.e-]+)\s+([\d\.e-]+)\s+([\d\.e-]+)\s+$")
+
+        aftersolution = False
+        for line in f:
+            if not aftersolution:
+                preamble += line
+                if line == ("[Solution]\n"):
+                    aftersolution = True
+            elif points is None:    # First line after [Solution] gives the number of points in the solution
+                points = int(line)
+                ans = FEMMans(points, preamble)
+            else:   # Read data point and add to dataset
+                match = dataregex.search(line)
+                if match:
+                    ans.x[index] = float(match.group(1))
+                    ans.y[index] = float(match.group(2))
+                    ans.B[index] = float(match.group(3)) + float(match.group(4)) * 1j
+
+                    index += 1
+        return ans
+
+    def generateimdata(self, gridsize):
+        # Create grid with gridsize points per unit
+        # Syntax is: start:stop:steps
+        grid_x, grid_y = np.mgrid[math.floor(self.x.min()):math.ceil(self.x.max()):(math.ceil(self.x.max())-math.floor(self.x.min()))*gridsize*1j,
+                         math.floor(self.y.min()):math.ceil(self.y.max()):(math.ceil(self.y.max())-math.floor(self.y.min()))*gridsize*1j]
+        grid = griddata(np.vstack((self.x, self.y)).T, np.absolute(self.B), (grid_x, grid_y), method='cubic')
+
+        return grid.T
+
+class FEMMfem:
+    freqregex = re.compile(r"\[Frequency\]\s*=\s*[\d\.e-]+$", re.MULTILINE)
+
+    def __init__(self, filecontent="", path=""):
+        self.femcontent = None
+
+        if filecontent:
+            self.femcontent = filecontent
+        elif path:
+            with open(path) as f:
+                self.femcontent = f.read()
+
+    def setfreq(self, freq):
+        return FEMMfem.freqregex.sub("[Frequency] = %s" % freq, self.femcontent)
 
 class FEMM:
     def readans(self, path):
@@ -52,15 +114,7 @@ class FEMM:
                     index += 1
         return ans
 
-    def plotans(self, ans):
-        grid_x, grid_y = np.mgrid[math.floor(ans.x.min()):math.ceil(ans.x.max()):1000j, math.floor(ans.y.min()):math.ceil(ans.y.max()):1000j]
-        grid = griddata(np.vstack((ans.x, ans.y)).T, np.absolute(ans.B), (grid_x, grid_y), method='cubic')
-
-        plt.imshow(grid.T, extent=(math.floor(ans.x.min()), math.ceil(ans.x.max()), math.floor(ans.y.min()), math.ceil(ans.y.max())), cmap=plt.get_cmap("jet"))
-        plt.contour(grid_x, grid_y, grid)
-        plt.show()
-
-    def saveans(self, ans, name):
+    """def saveans(self, ans, name):
         grid_x, grid_y = np.mgrid[math.floor(ans.x.min()):math.ceil(ans.x.max()):1000j,
                          math.floor(ans.y.min()):math.ceil(ans.y.max()):1000j]
         grid = griddata(np.vstack((ans.x, ans.y)).T, np.absolute(ans.B), (grid_x, grid_y), method='cubic')
@@ -72,14 +126,14 @@ class FEMM:
         plt.colorbar()
         plt.contour(grid_x, grid_y, grid)
         plt.savefig(name)
-        plt.clf()
+        plt.clf()"""
 
     def plotlogrange(self, femmfile, start, stop):
         file = None
         with open(femmfile) as f:
             file = f.read()
 
-        logscale = np.logspace(start, stop, num=2000)
+        logscale = np.logspace(start, stop, num=200)
 
         freqregex = re.compile(r"\[Frequency\]\s*=\s*[\d\.e-]+$", re.MULTILINE)
         for freq in logscale:
