@@ -19,6 +19,8 @@ import sys
 import gui
 
 import math
+import appdirs
+import json
 
 #/home/drluke/.wine/drive_c/femm42/examples/test.ans
 
@@ -31,7 +33,7 @@ class FEMMCanvas(FigureCanvasQTAgg):
         
         super(FEMMCanvas, self).__init__(fig)
         
-        a.plotans(ansr, self.axes)
+        #a.plotans(ansr, self.axes)
 
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
@@ -42,64 +44,63 @@ class FEMMCanvas(FigureCanvasQTAgg):
         pass
 
 
-if __name__ == '__main__':
-    class FEMMSolutionManager:
-        def __init__(self, canvas: FigureCanvasQTAgg, ui: gui.Ui_MainWindow, femmfile: FEMMfem):
-            self.canvas = canvas
-            self.ui = ui
-            self.femmfile = femmfile
+class FEMMSolutionManager:
+    def __init__(self, canvas: FigureCanvasQTAgg, ui: gui.Ui_MainWindow, femmfile: FEMMfem):
+        self.canvas = canvas
+        self.ui = ui
+        self.femmfile = femmfile
 
-            # initialize some healthy values
-            self.minfreq = self.ui.minfreqSpinBox.value()
-            self.maxfreq = self.ui.maxfreqSpinBox.value()
-            self.decadesteps = self.ui.decadestepsSpinBox.value()
+        # initialize some healthy values
+        self.minfreq = self.ui.minfreqSpinBox.value()
+        self.maxfreq = self.ui.maxfreqSpinBox.value()
+        self.decadesteps = self.ui.decadestepsSpinBox.value()
 
-            self.ui.freqSlider.setMinimum(math.floor(math.log10(self.minfreq) * 100))
-            self.ui.freqSlider.setMaximum(math.ceil(math.log10(self.maxfreq) * 100))
+        self.ui.freqSlider.setMinimum(math.floor(math.log10(self.minfreq) * 100))
+        self.ui.freqSlider.setMaximum(math.ceil(math.log10(self.maxfreq) * 100))
 
-            # Signals
-            self.ui.minfreqSpinBox.valueChanged.connect(self.minmaxchange)
-            self.ui.maxfreqSpinBox.valueChanged.connect(self.minmaxchange)
-            self.ui.decadestepsSpinBox.valueChanged.connect(self.stepchange)
-            self.ui.freqSlider.valueChanged.connect(self.freqsliderchange)
-            self.ui.freqSpinBox.valueChanged.connect(self.freqspinboxchange)
-            self.ui.generateButton.pressed.connect(self.gensolutions)
+        # Signals
+        self.ui.minfreqSpinBox.valueChanged.connect(self.minmaxchange)
+        self.ui.maxfreqSpinBox.valueChanged.connect(self.minmaxchange)
+        self.ui.decadestepsSpinBox.valueChanged.connect(self.stepchange)
+        self.ui.freqSlider.valueChanged.connect(self.freqsliderchange)
+        self.ui.freqSpinBox.valueChanged.connect(self.freqspinboxchange)
+        self.ui.generateButton.pressed.connect(self.gensolutions)
 
-            self.solutions = {}
+        self.solutions = {}
 
-        def minmaxchange(self, value):
-            self.minfreq = self.ui.minfreqSpinBox.value()
-            self.maxfreq = self.ui.maxfreqSpinBox.value()
+    def minmaxchange(self, value):
+        self.minfreq = self.ui.minfreqSpinBox.value()
+        self.maxfreq = self.ui.maxfreqSpinBox.value()
 
-            self.ui.freqSlider.setMinimum(math.floor(math.log10(self.minfreq)*100))
-            self.ui.freqSlider.setMaximum(math.ceil(math.log10(self.maxfreq)*100))
+        self.ui.freqSlider.setMinimum(math.floor(math.log10(self.minfreq)*100))
+        self.ui.freqSlider.setMaximum(math.ceil(math.log10(self.maxfreq)*100))
 
-        def stepchange(self, value):
-            # This is a bit more complicated. When the step size changes, all previous solutions have to be discarded.
-            self.decadesteps = self.ui.decadestepsSpinBox.value()
-            self.solutions = {} # Dump all solutions when the stepsize is changes, otherwise data recycling will become too complicated
+    def stepchange(self, value):
+        # This is a bit more complicated. When the step size changes, all previous solutions have to be discarded.
+        self.decadesteps = self.ui.decadestepsSpinBox.value()
+        self.solutions = {}     # Dump all solutions when the stepsize is changes, otherwise data recycling will become too complicated
 
-        def freqsliderchange(self, value):
-            if self.ui.freqSlider.hasFocus():
-                self.ui.freqSpinBox.setValue(10**(value/100))
+    def freqsliderchange(self, value):
+        if self.ui.freqSlider.hasFocus():
+            self.ui.freqSpinBox.setValue(10**(value/100))
 
-        def freqspinboxchange(self, value):
-            if self.ui.freqSpinBox.hasFocus():
-                self.ui.freqSlider.setValue(math.log10(value)*100)
+    def freqspinboxchange(self, value):
+        if self.ui.freqSpinBox.hasFocus():
+            self.ui.freqSlider.setValue(math.log10(value)*100)
 
-        def genlogrange(self):
-            start = math.log10(self.minfreq)
-            stop = math.log10(self.maxfreq)
-            num = int((stop-start)*self.decadesteps)
-            if num <= 0:
-                num = 1
-            return np.logspace(start, stop, num, endpoint=True)
+    def genlogrange(self):
+        start = math.log10(self.minfreq)
+        stop = math.log10(self.maxfreq)
+        num = int((stop-start)*self.decadesteps)
+        if num <= 0:
+            num = 1
+        return np.logspace(start, stop, num, endpoint=True)
 
-        def gensolutions(self):
-            logrange = self.genlogrange()
-            for freq in logrange:
-                if freq not in self.solutions:
-                    pass    # TODO: generate solution
+    def gensolutions(self):
+        logrange = self.genlogrange()
+        for freq in logrange:
+            if freq not in self.solutions:
+                pass    # TODO: generate solution
 
 
 class BodeCanvas(FigureCanvasQTAgg):
@@ -151,6 +152,19 @@ class bodewindow(QMainWindow):
 
 
 def main():
+    configdir = appdirs.user_config_dir("FEMMBode")
+    if not os.path.isdir(configdir):    # Create configuration dir if it doesn't exist
+        os.makedirs(configdir)
+    if os.path.exists(os.path.join(configdir, "preferences.json")):     # Check if config file exists, load if true
+        with open(os.path.join(configdir, "preferences.json")) as f:
+            config = json.load(f)
+            print(config)
+    else:   # Create blank config file if false
+        config = {"cdrivepath": os.path.join(os.path.expanduser("~/.wine/drive_c")),
+                  "femmexe": "C:\\\\femm42\\\\bin\\\\femm.exe"}
+        with open(os.path.join(configdir, "preferences.json"), "w") as f:
+            json.dump(config, f, indent=4, sort_keys=True)
+
     app = QApplication(sys.argv)
 
     mainwindow = bodewindow()
@@ -163,6 +177,8 @@ def main():
 
 if __name__ == "__main__":
     a = FEMM()
+
+
     #ansr = a.readans("/home/drluke/.wine/drive_c/femm42/examples/test.ans")
     #a.plotans(ansr)
     #a.saveans(ansr, "foo.png")
