@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 import re
-import math
+import math, cmath
 from scipy.interpolate import griddata
 
 import os
@@ -21,6 +21,8 @@ import gui
 import math
 import appdirs
 import json
+
+from pathlib import Path
 
 
 def customexcepthook(type, value, traceback):
@@ -56,10 +58,35 @@ class FEMMCanvas(FigureCanvasQTAgg):
             self.draw()
             self.repaint()
 
+class BodeCanvas(FigureCanvasQTAgg):
+    def __init__(self, fig):
+        fig = matplotlib.figure.Figure(figsize=(4, 4), dpi=100)
+        self.axes = fig.add_subplot(111)
+
+        super(BodeCanvas, self).__init__(fig)
+
+        self.lastdrawnfreq = None
+
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        #self.updateGeometry()
+        self.draw_idle()
+
+    def updateBode(self, freqs: list, bodevalues: list):
+        ampli = list(map(abs, bodevalues))
+        phase = list(map(cmath.phase, bodevalues))
+
+        self.axes.clear()
+        self.axes.loglog(freqs, ampli)
+        self.axes.loglog(freqs, phase)
+        self.draw()
+        self.repaint()
+
 
 class FEMMSolutionManager:
-    def __init__(self, canvas: FigureCanvasQTAgg, ui: gui.Ui_MainWindow, femmfile: FEMMfem, config: dict):
+    def __init__(self, canvas: FEMMCanvas, bodecanvas: BodeCanvas, ui: gui.Ui_MainWindow, femmfile: FEMMfem, config: dict):
         self.canvas = canvas
+        self.bodecanvas = bodecanvas
         self.ui = ui
         self.femmfile = femmfile
         self.config = config
@@ -85,6 +112,9 @@ class FEMMSolutionManager:
         self.ui.freqSlider.valueChanged.connect(self.freqsliderchange)
         self.ui.freqSpinBox.valueChanged.connect(self.freqspinboxchange)
         self.ui.generateButton.pressed.connect(self.gensolutions)
+
+        # Matplotlib Signals
+        self.mplsignal = self.canvas.mpl_connect("button_press_event", self.canvasClicked)
 
         self.solutions = {}
 
@@ -143,8 +173,18 @@ class FEMMSolutionManager:
         self.ui.freqSlider.setEnabled(True)
         self.ui.freqSpinBox.setEnabled(True)
 
-class BodeCanvas(FigureCanvasQTAgg):
-    pass
+    def canvasClicked(self, event):
+        xcoord = event.xdata
+        ycoord = event.ydata
+
+        freqs = []
+        vals = []
+        for freq in self.solutions:
+            freqs.append(freq)
+            vals.append(self.solutions[freq]["ans"].getValueAtPoint(xcoord, ycoord))
+
+        self.bodecanvas.updateBode(freqs, vals)
+
 
 class bodewindow(QMainWindow):
     def __init__(self, config, *args, **kwargs):
@@ -183,7 +223,7 @@ class bodewindow(QMainWindow):
             path = fileDialog.selectedFiles()[0]    # selectedFiles returns a list of selected files, but we only take the first
             if os.path.exists(path):
                 self.currentFEM = FEMMfem(path=path)
-                self.FEMMSolutionManager = FEMMSolutionManager(self.FEMMCanvas, self.ui, self.currentFEM, self.config)
+                self.FEMMSolutionManager = FEMMSolutionManager(self.FEMMCanvas, self.bodeCanvas, self.ui, self.currentFEM, self.config)
 
 
 

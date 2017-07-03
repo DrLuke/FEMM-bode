@@ -4,7 +4,7 @@ import subprocess
 import numpy as np
 import re
 import math
-from scipy.interpolate import griddata
+from scipy.interpolate import griddata, LinearNDInterpolator
 import os
 
 class FEMMans:
@@ -14,6 +14,9 @@ class FEMMans:
         self.x = np.zeros(points)
         self.y = np.zeros(points)
         self.B = np.zeros(points, dtype=np.complex64)
+
+        self.interpRE = None
+        self.interpIM = None
 
     @staticmethod
     def readans(path):
@@ -51,6 +54,7 @@ class FEMMans:
                     ans.B[index] = float(match.group(3)) + float(match.group(4)) * 1j
 
                     index += 1
+
         return ans
 
     def generateimdata(self, gridsize):
@@ -61,6 +65,12 @@ class FEMMans:
         grid = griddata(np.vstack((self.x, self.y)).T, np.absolute(self.B), (grid_x, grid_y), method='cubic')
 
         return grid.T
+
+    def getValueAtPoint(self, x, y):
+        interpolatorRE = LinearNDInterpolator(np.vstack((self.x, self.y)).T, self.B.real)
+        interpolatorIM = LinearNDInterpolator(np.vstack((self.x, self.y)).T, self.B.imag)
+
+        return interpolatorRE((x, y)) + interpolatorIM((x, y)) * 1j
 
 class FEMMfem:
     freqregex = re.compile(r"\[Frequency\]\s*=\s*[\d\.e-]+$", re.MULTILINE)
