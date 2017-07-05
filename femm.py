@@ -35,7 +35,9 @@ class FEMMans:
         ans = None
         index = 0
 
-        dataregex = re.compile(r"^([\d\.e-]+)\s+([\d\.e-]+)\s+([\d\.e-]+)\s+([\d\.e-]+)\s+([\d\.e-]+)\s+$")
+        dataregex = re.compile(r"^([\d\.e-]+)\s+([\d\.e-]+)\s+([\d\.e-]+)\s+([\d\.e-]+)\s?([\d\.e-]*)\s?$")
+
+        frequency = None
 
         aftersolution = False
         for line in f:
@@ -43,6 +45,10 @@ class FEMMans:
                 preamble += line
                 if line == ("[Solution]\n"):
                     aftersolution = True
+
+                    match = re.match("\[Frequency\]\s*?=\s*?(\d+\.?\d*)$", preamble, re.MULTILINE)
+                    if match:
+                        frequency = float(match.group(1))
             elif points is None:    # First line after [Solution] gives the number of points in the solution
                 points = int(line)
                 ans = FEMMans(points, preamble)
@@ -51,8 +57,10 @@ class FEMMans:
                 if match:
                     ans.x[index] = float(match.group(1))
                     ans.y[index] = float(match.group(2))
-                    ans.B[index] = float(match.group(3)) + float(match.group(4)) * 1j
-
+                    if frequency == 0:
+                        ans.B[index] = float(match.group(3))
+                    else:
+                        ans.B[index] = float(match.group(3)) + float(match.group(4)) * 1j
                     index += 1
 
         return ans

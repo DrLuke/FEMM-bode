@@ -62,6 +62,12 @@ class BodeCanvas(FigureCanvasQTAgg):
     def __init__(self, fig):
         fig = matplotlib.figure.Figure(figsize=(4, 4), dpi=100)
         self.axes = fig.add_subplot(111)
+        self.axes.set_xlabel("Frequency [Hz]")
+        self.axes.set_ylabel("Magnetic Flux Dampening [dB]")
+
+
+        self.axes2 = self.axes.twinx()
+        self.axes2.set_ylabel("Magnetic Flux Phase [radians]")
 
         super(BodeCanvas, self).__init__(fig)
 
@@ -69,16 +75,38 @@ class BodeCanvas(FigureCanvasQTAgg):
 
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
+
+
         #self.updateGeometry()
         self.draw_idle()
 
     def updateBode(self, freqs: list, bodevalues: list):
+        dcval = None
+        if freqs[0] == 0:
+            freqs = freqs[1:]
+            dcval = bodevalues[0]
+            bodevalues = bodevalues[1:]
+
+
         ampli = list(map(abs, bodevalues))
+        if dcval is not None:
+            for i in range(len(ampli)):
+                ampli[i] = 20*math.log10(abs(ampli[i]) / abs(dcval))
+
         phase = list(map(cmath.phase, bodevalues))
+        for i in range(len(phase)):
+            phase[i] = phase[i] / (2*math.pi) * 360
+        print(phase)
+
+        print(freqs)
 
         self.axes.clear()
-        self.axes.loglog(freqs, ampli)
-        self.axes.loglog(freqs, phase)
+        self.axes.grid()
+        self.axes.semilogx(freqs, ampli, "b")
+
+        self.axes2.clear()
+        self.axes2.semilogx(freqs, phase, "r-")
+
         self.draw()
         self.repaint()
 
@@ -149,7 +177,7 @@ class FEMMSolutionManager:
         num = int((stop-start)*self.decadesteps)
         if num <= 0:
             num = 1
-        return np.logspace(start, stop, num, endpoint=True)
+        return np.concatenate((np.array([0]), np.logspace(start, stop, num, endpoint=True)))    # Add frequency 0 aswell
 
     def gensolutions(self):
         logrange = self.genlogrange()
@@ -179,6 +207,7 @@ class FEMMSolutionManager:
 
         freqs = []
         vals = []
+
         for freq in self.solutions:
             freqs.append(freq)
             vals.append(self.solutions[freq]["ans"].getValueAtPoint(xcoord, ycoord))
@@ -252,12 +281,6 @@ def main():
 
 if __name__ == "__main__":
     a = FEMM()
-
-
-    #ansr = a.readans("/home/drluke/.wine/drive_c/femm42/examples/test.ans")
-    #a.plotans(ansr)
-    #a.saveans(ansr, "foo.png")
-    #a.plotlogrange("/home/drluke/.wine/drive_c/femm42/examples/test.FEM", -1, 12)
 
     main()
 
